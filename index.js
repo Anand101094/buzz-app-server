@@ -145,6 +145,6 @@ app.get("/host", (req, res) => {
   });
 });
 
-httpServer.listen(3000, () => {
+httpServer.listen(process.env.PORT || 3000, () => {
   console.log("listening to port 3000");
 });
