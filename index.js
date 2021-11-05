@@ -39,7 +39,7 @@ const getRoomKey = () => {
 
 const io = require("socket.io")(httpServer, {
   cors: {
-    origin: "http://localhost:8080",
+    origin: ["http://localhost:8080", "https://netlify-buzzer-app.netlify.app"],
     methods: ["GET", "POST"],
   },
 });
