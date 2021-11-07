@@ -45,42 +45,65 @@ const io = require("socket.io")(httpServer, {
 });
 
 io.on("connection", (socket) => {
-  // Join room
-
-  socket.on("join_room", ({ roomId, userData }) => {
-    // adding room entry
+  // create room
+  socket.on("create_room", ({ roomId, userData }) => {
     if (!rooms[roomId]) {
       rooms[roomId] = {
         users: [userData],
       };
-    } else {
-      rooms[roomId].users.push(userData);
     }
 
-    // adding user Entry
     if (!users[socket.id]) {
       users[socket.id] = userData;
     }
-
     socket.join(roomId);
+  });
 
-    io.to(roomId).emit("new_user_connection", rooms[roomId].users);
+  // Join room
+  socket.on("join_room", ({ roomId, userData }) => {
+    // adding room entry
+    if (rooms[roomId]) {
+      rooms[roomId].users.push(userData);
+
+      // adding user Entry
+      if (!users[socket.id]) {
+        users[socket.id] = userData;
+      }
+
+      socket.join(roomId);
+      socket.emit("room_joined");
+      io.to(roomId).emit("new_user_connection", rooms[roomId].users);
+    } else {
+      socket.emit("invalid_room");
+    }
   });
 
   // Incoming buzzer
-
   socket.on("send_buzzer", ({ roomId, userData }) => {
+    if (
+      rooms[roomId] &&
+      rooms[roomId].hasOwnProperty("firstBuzz") &&
+      rooms[roomId].hasOwnProperty("buzzLocked")
+    ) {
+      return;
+    }
     const currentSocketIndex =
       rooms[roomId] &&
       rooms[roomId].users.findIndex((user) => user.userId === socket.id);
+
     if (currentSocketIndex !== -1) {
+      if (rooms[roomId] && rooms[roomId].hasOwnProperty("firstBuzz")) {
+        rooms[roomId]["buzzLocked"] = true;
+        console.log("locked buzzer");
+        io.to(roomId).emit("buzzer_locked_by", { socketId: socket.id });
+      }
+
       rooms[roomId].users[currentSocketIndex] = userData;
       io.to(roomId).emit("buzzer_clicked", rooms[roomId].users);
     }
   });
 
   // Reset buzzers
-
   socket.on("reset_buzzers", ({ roomId }) => {
     // remove all the timestamps from mentioned roomId
     rooms[roomId] &&
@@ -89,6 +112,35 @@ io.on("connection", (socket) => {
       });
 
     io.to(roomId).emit("buzzer_reset", rooms[roomId].users);
+  });
+
+  socket.on("kick_player", async ({ roomId, socketId }) => {
+    if (roomId && socketId) {
+      // get all the sockets in that room, find the kicked out player and disconnect his/her socket.
+      const sockets = await io.in(roomId).fetchSockets();
+      for (const socket of sockets) {
+        if (socket.id === socketId) {
+          socket.emit("kicked_out", { socketId });
+          socket.disconnect(true);
+        }
+      }
+    }
+  });
+
+  // activate first buzz
+  socket.on("first_buzz_activate", ({ roomId }) => {
+    if (rooms[roomId]) {
+      rooms[roomId]["firstBuzz"] = true;
+    }
+  });
+
+  // activate first buzz
+  socket.on("first_buzz_deactivate", ({ roomId }) => {
+    if (rooms[roomId]) {
+      delete rooms[roomId]["firstBuzz"];
+      delete rooms[roomId]["buzzLocked"];
+      io.to(roomId).emit("buzzer_unlocked");
+    }
   });
 
   socket.on("disconnect", (reason) => {
@@ -107,7 +159,7 @@ io.on("connection", (socket) => {
       });
 
     if (getSocketIndexToRemove !== -1) {
-      // if it's host, remove the room 
+      // if it's host, remove the room
       if (
         rooms[disconnectedSocketRoomId] &&
         rooms[disconnectedSocketRoomId].users[getSocketIndexToRemove].host
