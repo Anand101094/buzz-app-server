@@ -94,7 +94,6 @@ io.on("connection", (socket) => {
     if (currentSocketIndex !== -1) {
       if (rooms[roomId] && rooms[roomId].hasOwnProperty("firstBuzz")) {
         rooms[roomId]["buzzLocked"] = true;
-        console.log("locked buzzer");
         io.to(roomId).emit("buzzer_locked_by", { socketId: socket.id });
       }
 
@@ -112,6 +111,9 @@ io.on("connection", (socket) => {
       });
 
     io.to(roomId).emit("buzzer_reset", rooms[roomId].users);
+    if(rooms[roomId] && rooms[roomId]["firstBuzz"]) {
+      io.to(roomId).emit("buzzer_unlocked");
+    }
   });
 
   socket.on("kick_player", async ({ roomId, socketId }) => {
@@ -120,8 +122,20 @@ io.on("connection", (socket) => {
       const sockets = await io.in(roomId).fetchSockets();
       for (const socket of sockets) {
         if (socket.id === socketId) {
+          // delete the user
+          delete users[socketId];
+
+          const getSocketIndexToRemove =
+            rooms[roomId] &&
+            rooms[roomId].users.findIndex((user) => {
+              return socketId === user.userId;
+            });
+
+          rooms[roomId] &&
+            rooms[roomId].users.splice(getSocketIndexToRemove, 1);
+
           socket.emit("kicked_out", { socketId });
-          socket.disconnect(true);
+          // socket.disconnect(true);
         }
       }
     }
@@ -134,7 +148,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // activate first buzz
+  // deactivate first buzz
   socket.on("first_buzz_deactivate", ({ roomId }) => {
     if (rooms[roomId]) {
       delete rooms[roomId]["firstBuzz"];
