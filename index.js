@@ -111,7 +111,8 @@ io.on("connection", (socket) => {
       });
 
     io.to(roomId).emit("buzzer_reset", rooms[roomId].users);
-    if(rooms[roomId] && rooms[roomId]["firstBuzz"]) {
+    if (rooms[roomId] && rooms[roomId]["firstBuzz"]) {
+      delete rooms[roomId]["buzzLocked"];
       io.to(roomId).emit("buzzer_unlocked");
     }
   });
@@ -133,8 +134,11 @@ io.on("connection", (socket) => {
 
           rooms[roomId] &&
             rooms[roomId].users.splice(getSocketIndexToRemove, 1);
-
           socket.emit("kicked_out", { socketId });
+
+          //send the update to all room members
+          io.to(roomId).emit("user_disconected", rooms[roomId].users);
+
           // socket.disconnect(true);
         }
       }
